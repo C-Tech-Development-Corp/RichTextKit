@@ -19,6 +19,7 @@
     <PackageTags>rich text, rich, text, Skia, SkiaSharp, Font</PackageTags>
     <Description>Easy to use rich text rendering for SkiaSharp, including font-fallback, bi-directional text support and more...</Description>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <RepositoryUrl>https://github.com/toptensoftware/richtextkit</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,8 +27,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="SkiaSharp" Version="2.80.2" />
-    <PackageReference Include="SkiaSharp.HarfBuzz" Version="2.80.2" />
+    <PackageReference Include="SkiaSharp" Version="2.88.3" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" Version="2.88.3" />
   </ItemGroup>
 
 </Project>

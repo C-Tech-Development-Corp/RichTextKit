@@ -90,6 +90,27 @@ namespace Topten.RichTextKit.Editor
         }
 
         /// <summary>
+        /// Gets the default alignment for paragraphs in this document
+        /// </summary>
+        public TextAlignment DefaultAlignment
+        {
+            get => _defaultAlignment;
+            set
+            {
+                _defaultAlignment = value;
+                if (PlainTextMode)
+                {
+                    foreach (var p in _paragraphs)
+                    {
+                        p.TextBlock.Alignment = value;
+                    }
+                    InvalidateLayout();
+                    FireDocumentRedraw();
+                }
+            }
+        }
+
+        /// <summary>
         /// Specifies the style to be used in plain text mode
         /// </summary>
         public IStyle DefaultStyle
@@ -128,6 +149,9 @@ namespace Topten.RichTextKit.Editor
                 _paragraphs.Clear();
                 _paragraphs.Add(new TextParagraph(_defaultStyle));
                 ReplaceText(null, new TextRange(0, 0), value, EditSemantics.None);
+
+                // Re-apply alignment
+                DefaultAlignment = DefaultAlignment;
 
                 // Disable undo
                 _undoManager.Clear();
@@ -647,6 +671,16 @@ namespace Topten.RichTextKit.Editor
                 if (ii >= indicies.Count)
                     ii = indicies.Count - 1;
 
+                if (ii + 1 >= indicies.Count)
+                {
+                    // Point is past end of paragraph
+                    return new TextRange(
+                        para.CodePointIndex + indicies[ii],
+                        para.CodePointIndex + indicies[ii],
+                        true
+                    );
+                }
+
                 // Create text range covering the entire word
                 return new TextRange(
                     para.CodePointIndex + indicies[ii],
@@ -723,7 +757,8 @@ namespace Topten.RichTextKit.Editor
         /// <param name="range">The range to be replaced</param>
         /// <param name="text">The text to replace with</param>
         /// <param name="semantics">Controls how undo operations are coalesced and view selections updated</param>"
-        public void ReplaceText(ITextDocumentView view, TextRange range, string text, EditSemantics semantics)
+        /// <param name="styleToUse">The style to use for the added text (optional)</param>
+        public void ReplaceText(ITextDocumentView view, TextRange range, string text, EditSemantics semantics, IStyle styleToUse = null)
         {
             // Convert text to utf32
             Slice<int> codePoints;
@@ -737,7 +772,7 @@ namespace Topten.RichTextKit.Editor
             }
 
             // Do the work
-            ReplaceText(view, range, codePoints, semantics);
+            ReplaceText(view, range, codePoints, semantics, styleToUse);
         }
 
         /// <summary>
@@ -747,7 +782,8 @@ namespace Topten.RichTextKit.Editor
         /// <param name="range">The range to be replaced</param>
         /// <param name="codePoints">The text to replace with</param>
         /// <param name="semantics">Controls how undo operations are coalesced and view selections updated</param>"
-        public void ReplaceText(ITextDocumentView view, TextRange range, Slice<int> codePoints, EditSemantics semantics)
+        /// <param name="styleToUse">The style to use for the added text (optional)</param>
+        public void ReplaceText(ITextDocumentView view, TextRange range, Slice<int> codePoints, EditSemantics semantics, IStyle styleToUse = null)
         {
             // Check range is valid
             if (range.Minimum < 0 || range.Maximum > this.Length)
@@ -768,7 +804,12 @@ namespace Topten.RichTextKit.Editor
                     codePoints = codePoints.SubSlice(0, breakPos);
             }
 
-            ReplaceTextInternal(view, range, new StyledText(codePoints), semantics, -1);
+            var styledText = new StyledText(codePoints);
+            if (styledText != null)
+            {
+                styledText.ApplyStyle(0, styledText.Length, styleToUse);
+            }
+            ReplaceTextInternal(view, range, styledText, semantics, -1);
         }
 
         /// <summary>
@@ -1374,6 +1415,7 @@ namespace Topten.RichTextKit.Editor
         ITextDocumentView _imeView;
         TextRange _imeInitialSelection;
         IStyle _defaultStyle = StyleManager.Default.Value.DefaultStyle;
+        TextAlignment _defaultAlignment = TextAlignment.Left;
         bool _suppressDocumentChangeEvents = false;
     }
 }

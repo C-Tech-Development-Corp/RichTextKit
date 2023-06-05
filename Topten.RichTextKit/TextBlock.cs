@@ -58,6 +58,27 @@ namespace Topten.RichTextKit
         }
 
         /// <summary>
+        /// This property is only used for text alignment when word wrapping
+        /// is disabled (MaxWidth == null).  When set it will be used for text
+        /// alignment.
+        /// </summary>
+        public float? RenderWidth
+        {
+            get => _renderWidth;
+            set
+            {
+                if (value.HasValue && value.Value < 0)
+                    value = 0;
+                if (_renderWidth != value)
+                {
+                    _renderWidth = value;
+                    if (!_maxWidth.HasValue)
+                        InvalidateLayout();
+                }
+            }
+        }
+
+        /// <summary>
         /// The maximum height of the TextBlock after which lines will be 
         /// truncated and the final line will be appended with an 
         /// ellipsis (`...`) character.
@@ -102,6 +123,26 @@ namespace Topten.RichTextKit
                 if (value != _maxLines)
                 {
                     _maxLines = value;
+                    InvalidateLayout();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Controls the rendering of an ellipsis (`...`) character,
+        /// when the line has been truncated because of MaxWidth/MaxHeight/MaxLines.
+        /// </summary>
+        /// <remarks>
+        /// The default value is true, an ellipsis will be rendered.
+        /// </remarks>
+        public bool EllipsisEnabled
+        {
+            get => _ellipsisEnabled;
+            set
+            {
+                if (value != _ellipsisEnabled)
+                {
+                    _ellipsisEnabled = value;
                     InvalidateLayout();
                 }
             }
@@ -213,6 +254,9 @@ namespace Topten.RichTextKit
         /// </remarks>
         public void AddEllipsis()
         {
+            if (!_ellipsisEnabled)
+                return;
+
             // Make sure laid out
             Layout();
 
@@ -901,6 +945,11 @@ namespace Topten.RichTextKit
         float? _maxWidth;
 
         /// <summary>
+        /// Render width (used for alignment with maxwidth is null)
+        /// </summary>
+        float? _renderWidth;
+
+        /// <summary>
         /// Width at which to wrap content
         /// </summary>
         float _maxWidthResolved = float.MaxValue;
@@ -924,6 +973,11 @@ namespace Topten.RichTextKit
         /// Maximum number of lines
         /// </summary>
         int _maxLinesResolved = int.MaxValue;
+
+        /// <summary>
+        /// Option to control ellipsis
+        /// </summary>
+        bool _ellipsisEnabled = true;
 
         /// <summary>
         /// Text alignment
@@ -1012,14 +1066,15 @@ namespace Topten.RichTextKit
                 return _textAlignment;
         }
 
-        // Use the shared Bidi algo instance
-        Bidi _bidi = Bidi.Instance.Value;
 
         /// <summary>
         /// Split into runs based on directionality and style switch points
         /// </summary>
         void BuildFontRuns()
         {
+            // Use the shared Bidi algo instance
+            Bidi bidi = Bidi.Instance.Value;
+
             var originalLength = _codePoints.Length;
             try
             {
@@ -1052,12 +1107,12 @@ namespace Topten.RichTextKit
                 }
 
                 // Process bidi
-                _bidi.Process(_bidiData);
+                bidi.Process(_bidiData);
 
-                var resolvedLevels = _bidi.ResolvedLevels;
+                var resolvedLevels = bidi.ResolvedLevels;
 
                 // Get resolved direction
-                _resolvedBaseDirection = (TextDirection)_bidi.ResolvedParagraphEmbeddingLevel;
+                _resolvedBaseDirection = (TextDirection)bidi.ResolvedParagraphEmbeddingLevel;
 
                 // Now process the embedded runs
                 if (_hasTextDirectionOverrides)
@@ -1085,7 +1140,7 @@ namespace Topten.RichTextKit
                         var levels = _bidiData.GetTempLevelBuffer(sr.Length);
 
                         // Process this style run
-                        _bidi.Process(types, pbts, pbvs, (sbyte)sr.Style.TextDirection, _bidiData.HasBrackets, _bidiData.HasEmbeddings, _bidiData.HasIsolates, levels);
+                        bidi.Process(types, pbts, pbvs, (sbyte)sr.Style.TextDirection, _bidiData.HasBrackets, _bidiData.HasEmbeddings, _bidiData.HasIsolates, levels);
 
                         // Copy result levels back to the full level set
                         resolvedLevels.SubSlice(sr.Start, sr.Length).Set(levels);
@@ -1408,11 +1463,15 @@ namespace Topten.RichTextKit
                 }
 
                 // If there wasn't a line break anywhere in the line, then we need to force one
-                // on a character boundary.  Also do this is we know we're on the last available line.
+                // on a character boundary.  Also do this if we know we're on the last available line.
                 if (frSplitIndex < 0 || (_maxLines.HasValue && _lines.Count == _maxLines.Value - 1))
                 {
                     // Get the last run that partially fitted
-                    frIndex = frIndexStartOfLine;
+                    while (frIndex > frIndexStartOfLine && _fontRuns[frIndex].XCoord > _maxWidthResolved)
+                    {
+                        frIndex--;
+                    }
+//                    frIndex = frIndexStartOfLine;
                     fr = _fontRuns[frIndex];
                     var room = _maxWidthResolved - fr.XCoord;
                     frSplitIndex = frIndex;
@@ -1767,11 +1826,11 @@ namespace Topten.RichTextKit
                 switch (ta)
                 {
                     case TextAlignment.Right:
-                        xAdjust = (_maxWidth ?? _measuredWidth) - line.Width;
+                        xAdjust = (_maxWidth ?? _renderWidth ??_measuredWidth) - line.Width;
                         break;
 
                     case TextAlignment.Center:
-                        xAdjust = ((_maxWidth ?? _measuredWidth) - line.Width) / 2;
+                        xAdjust = ((_maxWidth ?? _renderWidth ?? _measuredWidth) - line.Width) / 2;
                         break;
                 }
 
@@ -1861,6 +1920,9 @@ namespace Topten.RichTextKit
         /// <param name="postLayout">True if the ellipsis is being added post layout via a user call to AddEllipsis()</param>
         void AdornLineWithEllipsis(TextLine line, bool postLayout = false)
         {
+            if (!_ellipsisEnabled)
+                return;
+
             var lastRun = line.Runs[line.Runs.Count - 1];
 
             // Don't add ellipsis if the last run actually
